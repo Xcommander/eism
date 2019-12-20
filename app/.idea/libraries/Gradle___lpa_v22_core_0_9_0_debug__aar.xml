@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="Gradle: :lpa_v22_core_0.9.0_debug:@aar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/c85fcb8556cbc9f3034539beaac654bc/lpa_v22_core_0.9.0_debug/jars/classes.jar!/" />
+      <root url="file://$USER_HOME$/.gradle/caches/transforms-2/files-2.1/c85fcb8556cbc9f3034539beaac654bc/lpa_v22_core_0.9.0_debug/res" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
