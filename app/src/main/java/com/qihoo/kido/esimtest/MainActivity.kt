@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
@@ -36,6 +37,27 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
     var state: Int = STATE_ENABLE
     var bleDeviceName: String? = null
     var bluetoothConnect = false
+    var install = false
+    //超时处理
+    val mHandler: Handler = Handler(Handler.Callback {
+        when (it.what) {
+            1 -> {
+                Toast.makeText(this, getString(R.string.get_eid_timeout), Toast.LENGTH_LONG).show()
+                reset()
+                return@Callback false
+            }
+
+            2 -> {
+                Toast.makeText(this, getString(R.string.get_profile_list_timeout), Toast.LENGTH_LONG).show()
+                reset()
+                return@Callback false
+            }
+            else -> {
+                return@Callback false
+            }
+
+        }
+    })
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +97,7 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
         adapter.itemClick = object : ProfileAdapter.ItemClick {
             override fun onClick(positon: Int) {
                 cl_devices_list.visibility = View.GONE
-                setTip(getString(R.string.installing))
+                setTip(getString(R.string.ble_prepare))
                 BleFastManager.bleDevice = watchList?.get(positon)
                 bleDeviceName = BleFastManager.bleDevice?.name
                 BleFastManager.connect()
@@ -85,7 +107,9 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
         rv_watch_list.adapter = adapter
 
         bt_start.setOnClickListener {
-
+            BleFastManager.scan()
+        }
+        iv_refresh.setOnClickListener {
             BleFastManager.scan()
         }
         setTip(getString(R.string.tip_start))
@@ -114,15 +138,16 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
         BleFastManager.mBleScanListener = object : BleFastManager.BleScanListener {
 
             override fun onScaning(bleDevice: BleDevice?) {
-                Toast.makeText(this@MainActivity, "onScaning", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "正在搜索设备", Toast.LENGTH_SHORT).show()
                 //BleFastManager.bleDevice = bleDevice
             }
 
             override fun onScanStarted(success: Boolean) {
-                Toast.makeText(this@MainActivity, "onScanStarted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "开始搜索", Toast.LENGTH_SHORT).show()
             }
 
             override fun onScanFinish(scanResultList: MutableList<BleDevice>?) {
+                Toast.makeText(this@MainActivity, "搜索完成", Toast.LENGTH_SHORT).show()
                 if (state == STATE_ENABLE) {
                     bt_start.visibility = View.GONE
                     cl_devices_list.visibility = View.VISIBLE
@@ -130,6 +155,7 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
                     if (scanResultList.isNullOrEmpty()) {
                         tv_empty.visibility = View.VISIBLE
                         rv_watch_list.visibility = View.GONE
+                        tv_empty.text = getString(R.string.ble_list_null)
                     } else {
                         tv_empty.visibility = View.GONE
                         rv_watch_list.visibility = View.VISIBLE
@@ -149,11 +175,12 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
                             }
                         }
                     }
-                    if (bluetoothConnect) {
+                    if (!bluetoothConnect) {
                         Toast.makeText(this@MainActivity, getString(R.string.error_ble), Toast.LENGTH_LONG).show()
                     }
 
                 }
+                bluetoothConnect = false
             }
 
 
@@ -181,7 +208,7 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
         }
         BleFastManager.mBleConnectListener = object : BleFastManager.BleConnectListener {
             override fun onStartConnect() {
-                Toast.makeText(this@MainActivity, "onStartConnect", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "开始连接", Toast.LENGTH_SHORT).show()
             }
 
             override fun onDisConnected(
@@ -190,16 +217,19 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
                     gatt: BluetoothGatt?,
                     status: Int
             ) {
-                Toast.makeText(this@MainActivity, "onDisConnected", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "与设备失去连接", Toast.LENGTH_SHORT).show()
+                bluetoothConnect = false
             }
 
             override fun onConnectSuccess(bleDevice: BleDevice?, gatt: BluetoothGatt?, status: Int) {
-                Toast.makeText(this@MainActivity, "onConnectSuccess", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "连接成功", Toast.LENGTH_SHORT).show()
+                bluetoothConnect = true
+                mHandler.sendEmptyMessageDelayed(1, 10 * 1000)
                 lpaManager.getEid()
             }
 
             override fun onConnectFail(bleDevice: BleDevice?, exception: BleException?) {
-                Toast.makeText(this@MainActivity, "onConnectFail", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "连接失败", Toast.LENGTH_SHORT).show()
             }
 
         }
@@ -211,6 +241,7 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
     }
 
     private fun getprofilesList() {
+        mHandler.sendEmptyMessageDelayed(2, 60 * 1000)
         lpaManager.getProfileList()
     }
 
@@ -228,11 +259,9 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
     }
 
     override fun onEidRetrieved(p0: String?) {
-        if (state == STATE_ENABLE) {
-            lpaManager.installProfile(getString(R.string.active_code))
-        } else {
-            lpaManager.getProfileList()
-        }
+        //这里应该是get list
+        mHandler.removeMessages(1)
+        getprofilesList()
     }
 
     override fun onCommandReady(p0: ByteArray) {
@@ -243,11 +272,37 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
     }
 
     override fun onProfileListRetrieved(p0: MutableList<EuiccProfile>?) {
+        mHandler.removeMessages(2)
         profiles = p0
-        when (state) {
-            STATE_ENABLE -> lpaManager.enableProfile(profiles?.get(0)?.iccid)
-            STATE_DISABLE -> lpaManager.disableProfile(profiles?.get(0)?.iccid)
-            STATE_DELETE -> lpaManager.deleteProfile(profiles?.get(0)?.iccid)
+        var profile: EuiccProfile? = null
+        if (!profiles.isNullOrEmpty()) {
+            profile = profiles!![0]
+        }
+        /**
+         * (1)profile 为null，则手表没有profile，则下载profile，下载完成后，去enable profile
+         * (2)profile 不为null，state为enable，则disable profile
+         * (3)profile 不为null，state为disable ,则delete profile
+         */
+        if (profile == null) {
+            //profile 为null，下载profile
+            setTip(getString(R.string.installing))
+            lpaManager.installProfile(getString(R.string.active_code))
+
+        } else if (profile.status == 0) {
+            //profile 状态为disable，(1)刚安装好，则去enable profile (2)是之前安装,则delete profile
+            if (install) {
+                setTip(getString(R.string.ble_enable))
+                install = false
+                lpaManager.enableProfile(profile.iccid)
+            } else {
+                setTip(getString(R.string.ble_delete))
+                lpaManager.deleteProfile(profile.iccid)
+            }
+
+        } else if (profile.status == 1) {
+            //profile 为enable，disable profile
+            setTip(getString(R.string.ble_disable))
+            lpaManager.disableProfile(profile.iccid)
         }
 
     }
@@ -257,7 +312,6 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
 
     override fun onProfileDisableResult(p0: String?, p1: Boolean) {
         if (p1) {
-            bluetoothConnect = false
             bt_start.visibility = View.VISIBLE
             bt_start.text = getString(R.string.start_test_again)
             state = STATE_DELETE
@@ -274,6 +328,14 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
         bleDeviceName = null
     }
 
+    private fun reset() {
+        bt_start.visibility = View.VISIBLE
+        bt_start.text = getString(R.string.start_test)
+        state = STATE_ENABLE
+        setTip(getString(R.string.tip_start))
+        bleDeviceName = null
+    }
+
     override fun onEuiccReset(p0: Boolean) {
     }
 
@@ -282,6 +344,7 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
 
     override fun onInstallProfileResult(p0: Boolean) {
         if (p0) {
+            install = true
             getprofilesList()
         }
     }
@@ -291,7 +354,6 @@ class MainActivity : AppCompatActivity(), LpaEventListener {
 
     override fun onProfileEnableResult(p0: String?, p1: Boolean) {
         if (p1) {
-            bluetoothConnect = false
             bt_start.visibility = View.VISIBLE
             bt_start.text = getString(R.string.start_test_again)
             state = STATE_DISABLE

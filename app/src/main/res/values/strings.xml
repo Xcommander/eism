@@ -17,6 +17,13 @@
     <string name="error_ble">"蓝牙连接失败，请确保手表已开机且处于eism测试界面"</string>
     <string name="error_install">profile 安装失败</string>
     <string name="installing">正在开卡中,请稍等2–3分钟,切勿离开此界面</string>
+    <string name="ble_list_null">未发现eSIM设备，请确保手表在eSIM测试界面，然后点击刷新按钮</string>
+    <string name="ble_prepare">正在准备中，请稍后…</string>
+    <string name="ble_enable">打开profile中....，手表即将重启</string>
+    <string name="ble_delete">删除profile中，请稍后....</string>
+    <string name="ble_disable">关闭profile中…，手表即将重启</string>
+    <string name="get_eid_timeout">获取eSIM失败，请检查eSIM芯片是否OK</string>
+    <string name="get_profile_list_timeout">获取profile失败，请确保手表处于eSIM测试界面</string>
 <!--    <string name="error_ble">正在测试</string>
     <string name="error_ble">正在测试</string>
     <string name="error_ble">正在测试</string>
